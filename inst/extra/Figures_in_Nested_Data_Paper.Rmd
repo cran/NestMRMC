@@ -1,0 +1,540 @@
+---
+title: "Figures for Nested Data Paper"
+output:
+  pdf_document: default
+  html_notebook: default
+  html_document:
+    df_print: paged
+---
+```{r,warning=FALSE}
+# Library ----
+
+library(dplyr)
+library(iMRMC)
+library(mvtnorm)
+library(NestMRMC)
+library(doParallel)
+library(ggplot2)
+library(gridExtra)
+```
+
+
+## Figure 3 in the paper--histogram of number of positive and negative ROIs in 
+## balance and unbalance design
+
+```{r, echo=FALSE,warning=FALSE}
+
+
+## Balance design 
+sim.config = simu_config(fix_design = T,stream = 1)
+data = data_MRMC(sim.config)$data_final
+numROI_balance = AUC_per_reader_nest(data)$numROI
+
+## Unbalance design
+sim.config = simu_config(correlation_t = 0.8, fix_design = T,stream = 1)
+data = data_MRMC(sim.config)$data_final
+numROI_unbalance = AUC_per_reader_nest(data)$numROI
+
+numROI_comb = cbind(numROI_balance,numROI_unbalance)
+
+numROI_df_new = data.frame(num_ROI = c(numROI_comb[1,],numROI_comb[2,]),
+                           truth = as.factor(rep(c("pos","neg"),each = 200)),
+                           design = rep(rep(c("balance","unbalance"),each = 100),2) 
+                           %>% as.factor())
+
+## histogram
+ggplot(numROI_df_new, aes(x = num_ROI, 
+                          color = interaction(design,truth),
+                          fill = interaction(design,truth))) + 
+                          geom_histogram(alpha = 0.5,bins = 30, 
+                          position = "dodge")
+
+```
+
+## Figure 4
+
+### Data description for Figure 4
+
+* The results in these files assume that the truth labels of positive and negative ROIs are fixed across the 10,000 simulations, hence fixed is in the name of the file.  
+
+ 
+
+* In a balanced design each patient has approximately the same number of positive and negative ROIs. In an unbalanced design each patient tends to have unequal number of positive and negative ROIs. Note that for both designs the overall positive and negative ROIs number should be about the same, since the overall probabilities to be positive ROI and negative ROI are 0.5 and 0.5.
+
+
+* *sim_result_blance_fixed_cov05062021.csv* Contains the summarized statistics from 10,000 simulations results in 75 configurations for 100 patients and 10 ROIs per patient. All simulations use the balanced design and fixed truth labels. The 75 configurations are all the possible combinations of 3 AUC values (0.7, 0.8, 0.9), 5 covariance values (0.1, 0.25, 0.5, 0.75, 0.9) and 5 $\rho$ values (0.1, 0.25, 0.5, 0.75, 0.9). The details of parameters settingts in the 75 configurations is available in the **Table 1**.
+
+
+* *sim_result_unblance_fixed_cov05062021.csv* Contains the summarized statistics from 10,000 simulations for 75 configurations for 100 patients and 10 ROIs per patient. All simulations use the unbalanced design and fixed truth labels.The details of parameters settings in the 75 configurations is available in the **Table 1**.
+
+
+* There are 16 columns in the both files. The detailed information for each column is given at the end of this file. 
+
+  
+
+
+
+
+
+```{r, echo=FALSE}
+
+## Configs
+AUC = c(0.7,0.8,0.9)
+COV = c(0.1,0.25,0.5,0.75,0.9)
+RHO = c(0.1,0.25,0.5,0.75,0.9)
+## load data and name the columns
+sim_result_blance = read.csv("NestMRMC_simulation_results/sim_result_blance_fixed_cov05062021.csv",header = T)[,-1]
+sim_result_unblance = read.csv("NestMRMC_simulation_results/sim_result_unblance_fixed_cov05062021.csv",header = T)[,-1]
+
+sim_result_blance$RHO = rep(rep(RHO,each = 5),3)
+sim_result_blance$COV = rep(COV,15)
+
+sim_result_unblance$RHO = rep(rep(RHO,each = 5),3)
+sim_result_unblance$COV = rep(COV,15)
+
+
+
+## Convert parameter to factor for better visulization
+sim_result_blance$RHO = as.factor(rep(rep(RHO,each = 5),3))
+sim_result_blance$COV = as.factor(rep(COV,15))
+sim_result_blance$TRUE_AUC = as.factor(rep(AUC, each = 25))
+
+sim_result_unblance$RHO = as.factor(rep(rep(RHO,each = 5),3))
+sim_result_unblance$COV = as.factor(rep(COV,15))
+sim_result_unblance$TRUE_AUC = as.factor(rep(AUC, each = 25))
+
+configs_75 = sim_result_blance[,16:18]
+
+row.names(configs_75) = paste0('Config ', 1:75)
+## plot MC truth vs theoretical truth ----
+
+## VAR
+p1_MCvsTheo = ggplot(sim_result_blance %>% filter(TRUE_AUC == 0.7),
+                     aes(x = TRUE_VAR_MEAN, y = R1AUC_VAR)) + 
+  geom_point(aes(group =  TRUE_AUC, color = COV, shape = RHO), size = 1) +
+ggtitle("Balance AUC = 0.7") + ylim(0,0.0017) + xlim(0,0.0017) + 
+  xlab("Theoretical AUC Variance") + ylab("MC AUC Variance") +
+  geom_abline(intercept = 0, slope = 1,linetype = "dashed", color = "black")+
+  theme_bw()+ theme(text = element_text(size = 7)) + 
+  guides(colour = guide_legend(override.aes = list(size=1)),
+         shape = guide_legend(override.aes = list(size=1))) 
+
+
+p2_MCvsTheo = ggplot(sim_result_blance %>% filter(TRUE_AUC == 0.8),
+                     aes(x = TRUE_VAR_MEAN, y = R1AUC_VAR)) + 
+  geom_point(aes(group =  TRUE_AUC, color = COV, shape = RHO), size = 1) +
+ggtitle("Balance AUC = 0.8") + ylim(0,0.0017) + xlim(0,0.0017) + 
+  xlab("Theoretical AUC Variance") + ylab("MC AUC Variance") +
+  geom_abline(intercept = 0, slope = 1,linetype = "dashed", color = "black")+
+  theme_bw()+ theme(text = element_text(size = 7)) + 
+  guides(colour = guide_legend(override.aes = list(size=1)), 
+         shape = guide_legend(override.aes = list(size=1))) 
+
+
+p3_MCvsTheo = ggplot(sim_result_blance %>% filter(TRUE_AUC == 0.9),
+                     aes(x = TRUE_VAR_MEAN, y = R1AUC_VAR)) + 
+  geom_point(aes(group =  TRUE_AUC, color = COV, shape = RHO), size = 1) +
+ggtitle("Balance AUC = 0.9") + ylim(0,0.0017) + xlim(0,0.0017) + 
+  xlab("Theoretical AUC Variance") + ylab("MC AUC Variance") +
+  geom_abline(intercept = 0, slope = 1,linetype = "dashed", color = "black")+
+  theme_bw()+ theme(text = element_text(size = 7)) + 
+  guides(colour = guide_legend(override.aes = list(size=1)),
+         shape = guide_legend(override.aes = list(size=1))) 
+
+
+p4_MCvsTheo = ggplot(sim_result_unblance %>% filter(TRUE_AUC == 0.7),
+                     aes(x = TRUE_VAR_MEAN, y = R1AUC_VAR)) + 
+  geom_point(aes(group =  TRUE_AUC, color = COV, shape = RHO), size = 1) +
+  ggtitle("Unbalance AUC = 0.7") + ylim(0,0.0017) + xlim(0,0.0017) + 
+  xlab("Theoretical AUC Variance") + ylab("MC AUC Variance") +
+  geom_abline(intercept = 0, slope = 1,linetype = "dashed", color = "black")+
+  theme_bw()+ theme(text = element_text(size = 7)) + 
+  guides(colour = guide_legend(override.aes = list(size=1)),
+         shape = guide_legend(override.aes = list(size=1))) 
+
+
+p5_MCvsTheo = ggplot(sim_result_unblance %>% filter(TRUE_AUC == 0.8),
+                     aes(x = TRUE_VAR_MEAN, y = R1AUC_VAR)) + 
+  geom_point(aes(group =  TRUE_AUC, color = COV, shape = RHO), size = 1) +
+  ggtitle("Unbalance AUC = 0.8") +  
+  ylim(0,0.0017) + 
+  xlim(0,0.0017) + 
+  xlab("Theoretical AUC Variance") + 
+  ylab("MC AUC Variance") +
+  geom_abline(intercept = 0, slope = 1,linetype = "dashed", color = "black")+
+  theme_bw()+ 
+  theme(text = element_text(size = 7)) + 
+  guides(colour = guide_legend(override.aes = list(size=1)),
+         shape = guide_legend(override.aes = list(size=1))) 
+
+
+p6_MCvsTheo = ggplot(sim_result_unblance %>% filter(TRUE_AUC == 0.9),
+  aes(x = TRUE_VAR_MEAN, y = R1AUC_VAR)) + 
+  geom_point(aes(group =  TRUE_AUC, color = COV, shape = RHO), size = 1) +
+  ggtitle("Unbalance AUC = 0.9") + 
+  ylim(0,0.0017) + 
+  xlim(0,0.0017) + 
+  xlab("Theoretical AUC Variance") + 
+  ylab("MC AUC Variance") +
+  geom_abline(intercept = 0, slope = 1,linetype = "dashed", color = "black") +
+  theme_bw() + 
+  theme(text = element_text(size = 7)) + 
+  guides(colour = guide_legend(override.aes = list(size=1)),
+  shape = guide_legend(override.aes = list(size=1))) 
+                                                                                          
+grid.arrange(p1_MCvsTheo, p2_MCvsTheo, p3_MCvsTheo,
+             p4_MCvsTheo, p5_MCvsTheo, p6_MCvsTheo,nrow = 2,ncol = 3)
+
+```
+
+
+
+## Figure 5
+
+### Data description for Figure 5
+
+* The results in these files assume that the truth labels of positive and negative ROIs are randomly assigned across the 10,000 simulations, hence unfixed is in the name of the file.    
+
+
+* In a balanced design each patient has approximately the same number of positive and negative ROIs. In an unbalanced design each patient tends to have unequal number of positive and negative ROIs. Note that for both designs the overall positive and negative ROIs number should be about the same, since the overall probabilities to be positive ROI and negative ROI are 0.5 and 0.5.
+
+
+* *sim_result_blance_unfixed_cov005182021.csv* Contains the summarized statistics from 10,000 simulations results in 75 configurations for 100 patients and 10 ROIs per patient. All simulations use the balanced design and unfixed truth labels. The 75 configurations are all the possible combinations of 3 AUC values (0.7, 0.8, 0.9), 5 covariance values (0.1, 0.25, 0.5, 0.75, 0.9) and 5 $\rho$ values (0.1, 0.25, 0.5, 0.75, 0.9). The details of parameters settingts in the 75 configurations is available in the **Table 1**.
+
+
+* *sim_result_unblance_unfixed_cov05182021.csv* Contains the summarized statistics from 10,000 simulations for 75 configurations for 100 patients and 10 ROIs per patient. All simulations use the unbalanced design and unfixed truth labels.The details of parameters settings in the 75 configurations is available in the **Table 1**.
+
+
+* There are 16 columns in the both files. The detailed information is provided in the end.
+ 
+
+
+```{r, echo=FALSE}
+## Load data
+sim_result_blance = read.csv("NestMRMC_simulation_results/sim_result_blance_unfixed_cov005182021.csv",header = T)[,-1]
+sim_result_unblance = read.csv("NestMRMC_simulation_results/sim_result_unblance_unfixed_cov05182021.csv",header = T)[,-1]
+
+sim_result_blance$RHO = rep(rep(RHO,each = 5),3)
+sim_result_blance$COV = rep(COV,15)
+
+sim_result_unblance$RHO = rep(rep(RHO,each = 5),3)
+sim_result_unblance$COV = rep(COV,15)
+
+## Convert parameter to factor for better visulization
+sim_result_blance$RHO = as.factor(rep(rep(RHO,each = 5),3))
+sim_result_blance$COV = as.factor(rep(COV,15))
+sim_result_blance$TRUE_AUC = as.factor(rep(AUC, each = 25))
+sim_result_blance$TRUE_AUC = rep(AUC, each = 25)
+sim_result_unblance$RHO = as.factor(rep(rep(RHO,each = 5),3))
+sim_result_unblance$COV = as.factor(rep(COV,15))
+sim_result_unblance$TRUE_AUC = as.factor(rep(AUC, each = 25))
+sim_result_unblance$TRUE_AUC = rep(AUC, each = 25)
+## VAR
+p1_MCvsTheo = ggplot(sim_result_blance %>% filter(TRUE_AUC == 0.7),
+                     aes(x = TRUE_VAR_MEAN, y = R1VAR_MEAN)) + 
+  geom_point(aes( color = COV, shape = RHO),size = 1) +
+  ggtitle("Balance AUC = 0.7") + ylim(0,0.0017) + xlim(0,0.0017) + 
+  xlab("MC truth of AUC VAR") + ylab("MC MEAN of AUC VAR Estimates") +
+  geom_abline(intercept = 0, slope = 1,linetype = "dashed", color = "black")+
+  theme_bw()+ theme(text = element_text(size = 7)) + 
+  guides(colour = guide_legend(override.aes = list(size=1)),
+         shape = guide_legend(override.aes = list(size=1))) 
+
+
+p2_MCvsTheo = ggplot(sim_result_blance %>% filter(TRUE_AUC == 0.8),
+                     aes(x = TRUE_VAR_MEAN, y = R1VAR_MEAN)) + 
+  geom_point(aes( color = COV, shape = RHO),size = 1) +
+  ggtitle("Balance AUC = 0.8") + ylim(0,0.0017) + xlim(0,0.0017) + 
+  xlab("MC truth of AUC VAR") + ylab("MC MEAN of AUC VAR Estimates") +
+  geom_abline(intercept = 0, slope = 1,linetype = "dashed", color = "black")+
+  theme_bw()+ theme(text = element_text(size = 7)) + 
+  guides(colour = guide_legend(override.aes = list(size=1)),
+         shape = guide_legend(override.aes = list(size=1))) 
+
+
+p3_MCvsTheo = ggplot(sim_result_blance %>% filter(TRUE_AUC == 0.9),
+                     aes(x = TRUE_VAR_MEAN, y = R1VAR_MEAN)) + 
+  geom_point(aes( color = COV, shape = RHO),size = 1) +
+  ggtitle("Balance AUC = 0.9") + ylim(0,0.0017) + xlim(0,0.0017) + 
+  xlab("MC truth of AUC VAR") + ylab("MC MEAN of AUC VAR Estimates") +
+  geom_abline(intercept = 0, slope = 1,linetype = "dashed", color = "black")+
+  theme_bw()+ theme(text = element_text(size = 7)) + 
+  guides(colour = guide_legend(override.aes = list(size=1)),
+         shape = guide_legend(override.aes = list(size=1))) 
+
+
+
+p4_MCvsTheo = ggplot(sim_result_unblance %>% filter(TRUE_AUC == 0.7),
+                     aes(x = TRUE_VAR_MEAN, y = R1VAR_MEAN)) + 
+  geom_point(aes( color = COV, shape = RHO),size = 1) +
+  ggtitle("Unbalance AUC = 0.7") + ylim(0,0.0017) + xlim(0,0.0017) +  
+  xlab("MC truth of AUC VAR") + ylab("MC MEAN of AUC VAR Estimates") +
+  geom_abline(intercept = 0, slope = 1,linetype = "dashed", color = "black")+
+  theme_bw()+ theme(text = element_text(size = 7)) + 
+  guides(colour = guide_legend(override.aes = list(size=1)),
+         shape = guide_legend(override.aes = list(size=1))) 
+
+
+p5_MCvsTheo = ggplot(sim_result_unblance %>% filter(TRUE_AUC == 0.8),
+                     aes(x = TRUE_VAR_MEAN, y = R1VAR_MEAN)) + 
+  geom_point(aes( color = COV, shape = RHO),size = 1) +
+  ggtitle("Unbalance AUC = 0.8") + ylim(0,0.0017) + xlim(0,0.0017) +  
+  xlab("MC truth of AUC VAR") + ylab("MC MEAN of AUC VAR Estimates") +
+  geom_abline(intercept = 0, slope = 1,linetype = "dashed", color = "black")+
+  theme_bw()+ theme(text = element_text(size = 7)) + 
+  guides(colour = guide_legend(override.aes = list(size=1)),
+         shape = guide_legend(override.aes = list(size=1))) 
+
+
+p6_MCvsTheo = ggplot(sim_result_unblance %>% filter(TRUE_AUC == 0.9),
+                     aes(x = TRUE_VAR_MEAN, y = R1VAR_MEAN)) + 
+  geom_point(aes( color = COV, shape = RHO),size = 1) +
+  ggtitle("Unbalance AUC = 0.9") + ylim(0,0.0017) + xlim(0,0.0017) + 
+  xlab("MC truth of AUC VAR") + ylab("MC MEAN of AUC VAR Estimates") +
+  geom_abline(intercept = 0, slope = 1,linetype = "dashed", color = "black")+
+  theme_bw()+ theme(text = element_text(size = 7)) + 
+  guides(colour = guide_legend(override.aes = list(size=1)),
+         shape = guide_legend(override.aes = list(size=1))) 
+
+
+
+grid.arrange(p1_MCvsTheo, p2_MCvsTheo, p3_MCvsTheo,
+             p4_MCvsTheo, p5_MCvsTheo, p6_MCvsTheo,nrow = 2,ncol = 3)
+
+
+```
+
+
+# Figure 6
+
+
+### Data description for Figure 6
+
+* The results in these files assume that the truth labels of positive and negative ROIs are randomly assigned across the 10,000 simulations, hence unfixed is in the name of the file.    
+
+
+* In a balanced design each patient has approximately the same number of positive and negative ROIs. In an unbalanced design each patient tends to have unequal number of positive and negative ROIs. Note that for both designs the overall positive and negative ROIs number should be about the same, since the overall probabilities to be positive ROI and negative ROI are 0.5 and 0.5.
+
+* *sim_result_blance_unfixed_cov10042021.csv* Contains the summarized statistics from 10,000 simulations results in 75 configurations for 100 patients and 10 ROIs per patient. All simulations use the balanced design and unfixed truth labels. The 75 configurations are all the possible combinations of 3 AUC values (0.7, 0.8, 0.9), 5 covariance values (0.1, 0.25, 0.5, 0.75, 0.9) and 5 $\rho$ values (0.1, 0.25, 0.5, 0.75, 0.9). The details of parameters settingts in the 75 configurations is available in the **Table 1**.
+
+* *sim_result_unblance_unfixed_cov10042021.csv* Contains the summarized statistics from 10,000 simulations for 75 configurations for 100 patients and 10 ROIs per patient. All simulations use the unbalanced design and unfixed truth labels.The details of parameters settingts in the 75 configurations is available in the **Table 1**.
+
+* *sim_Nancy_blance_unfixed_cov10042021.csv* Contains the summarized statistics from 10,000 simulations for 75 configurations for 100 patients and 10 ROIs per patient based on Nancy's method. All simulations use the balanced design and unfixed truth labels.The details of parameters settingts in the 75 configurations is available in the **Table 1**.  
+
+* *sim_Nancy_unblance_unfixed_cov10042021.csv* Contains the summarized statistics from 10,000 simulations for 75 configurations for 100 patients and 10 ROIs per patient based on Nancy's method. All simulations use the unbalanced design and unfixed truth labels.The details of parameters settingts in the 75 configurations is available in the **Table 1**. 
+
+* There are 16 columns in the above files. The detailed information is provided in the end.
+
+  
+
+
+
+
+```{r,echo=FALSE}
+## load data ----
+
+sim_result_blance = read.csv("NestMRMC_simulation_results/sim_result_blance_unfixed_cov10042021.csv",header = T)[,-1]
+sim_result_unblance = read.csv("NestMRMC_simulation_results/sim_result_unblance_unfixed_cov10042021.csv",header = T)[,-1]
+
+sim_nancy_blance = read.csv("NestMRMC_simulation_results/sim_Nancy_blance_unfixed_cov10042021.csv",header = T)[,-1]
+sim_nancy_unblance = read.csv("NestMRMC_simulation_results/sim_Nancy_unblance_unfixed_cov10042021.csv",header = T)[,-1]
+
+AUC = c(0.7,0.8,0.9)%>% as.factor()
+COV = c(0.1,0.25,0.5,0.75,0.9)%>% as.factor()
+RHO = as.factor(c(0.1,0.25,0.5,0.75,0.9))
+
+
+## calculate the bias ---- 
+
+## AUC Bias
+sim_result_blance$R1AUC_BIAS = (sim_result_blance$TRUE_AUC - sim_result_blance$R1AUC_MEAN)/sim_result_blance$TRUE_AUC
+sim_result_unblance$R1AUC_BIAS = (sim_result_unblance$TRUE_AUC - sim_result_unblance$R1AUC_MEAN)/sim_result_unblance$TRUE_AUC
+sim_nancy_blance$R1AUC_BIAS = (sim_nancy_blance$TRUE_AUC - sim_nancy_blance$R1AUC_MEAN)/sim_nancy_blance$TRUE_AUC
+sim_nancy_unblance$R1AUC_BIAS = (sim_nancy_unblance$TRUE_AUC - sim_nancy_unblance$R1AUC_MEAN)/sim_nancy_unblance$TRUE_AUC
+
+## VAR Bias
+sim_result_blance$R1VAR_BIAS = (sim_result_blance$R1AUC_VAR - sim_result_blance$R1VAR_MEAN)/sim_result_blance$R1AUC_VAR
+sim_result_unblance$R1VAR_BIAS = (sim_result_unblance$R1AUC_VAR - sim_result_unblance$R1VAR_MEAN)/sim_result_unblance$R1AUC_VAR
+sim_nancy_blance$R1VAR_BIAS = (sim_nancy_blance$R1AUC_VAR - sim_nancy_blance$R1VAR_MEAN)/sim_nancy_blance$R1AUC_VAR
+sim_nancy_unblance$R1VAR_BIAS = (sim_nancy_unblance$R1AUC_VAR - sim_nancy_unblance$R1VAR_MEAN)/sim_nancy_unblance$R1AUC_VAR
+
+
+
+sim_result_blance$R1VAR_BIAS = (sim_result_blance$R1AUC_VAR - sim_result_blance$R1VAR_MEAN)
+sim_result_unblance$R1VAR_BIAS = (sim_result_unblance$R1AUC_VAR - sim_result_unblance$R1VAR_MEAN)
+sim_nancy_blance$R1VAR_BIAS = (sim_nancy_blance$R1AUC_VAR - sim_nancy_blance$R1VAR_MEAN)
+sim_nancy_unblance$R1VAR_BIAS = (sim_nancy_unblance$R1AUC_VAR - sim_nancy_unblance$R1VAR_MEAN)
+## COV Bias
+
+
+sim_result_blance$R1R2COV_BIAS = (sim_result_blance$R1R2COV_MC - sim_result_blance$R1R2COV_MEAN)/sim_result_blance$R1R2COV_MC
+sim_result_unblance$R1R2COV_BIAS = (sim_result_unblance$R1R2COV_MC - sim_result_unblance$R1R2COV_MEAN)/sim_result_unblance$R1R2COV_MC
+sim_nancy_blance$R1R2COV_BIAS = (sim_nancy_blance$R1R2COV_MC - sim_nancy_blance$R1R2COV_MEAN)/sim_nancy_blance$R1R2COV_MC
+sim_nancy_unblance$R1R2COV_BIAS = (sim_nancy_unblance$R1R2COV_MC - sim_nancy_unblance$R1R2COV_MEAN)/sim_nancy_unblance$R1R2COV_MC
+
+sim_result_blance$R1R2COV_BIAS = (sim_result_blance$R1R2COV_MC - sim_result_blance$R1R2COV_MEAN)
+sim_result_unblance$R1R2COV_BIAS = (sim_result_unblance$R1R2COV_MC - sim_result_unblance$R1R2COV_MEAN)
+sim_nancy_blance$R1R2COV_BIAS = (sim_nancy_blance$R1R2COV_MC - sim_nancy_blance$R1R2COV_MEAN)
+sim_nancy_unblance$R1R2COV_BIAS = (sim_nancy_unblance$R1R2COV_MC - sim_nancy_unblance$R1R2COV_MEAN)
+
+## Bias plot ---- 
+
+## AUC bias
+AUC_bias_combine = data.frame(method = rep(c("CCAUC","Nancy"),each = 150), 
+                          design = rep(rep(c("balance","unbalance"),each = 75),2),
+                          bias = c(sim_result_blance$R1AUC_BIAS,sim_result_unblance$R1AUC_BIAS,
+                                   sim_nancy_blance$R1AUC_BIAS,sim_nancy_unblance$R1AUC_BIAS))
+
+
+p1 = ggplot(AUC_bias_combine, aes(x=1:300,y = bias)) + geom_point(aes(color = method, shape = design))+
+ggtitle("AUC Relative Bias") + labs(x = "configurations", y = "AUC Relative Bias") + 
+geom_vline(xintercept = seq(75,225,by = 75), linetype = "dashed", size =0.5) +
+theme_bw() +  theme(text = element_text(size = 7)) 
+
+## VAR bias
+
+VAR_bias_combine = data.frame(method = rep(c("CCAUC","Nancy"),each = 150), 
+                              design = rep(rep(c("balance","unbalance"),each = 75),2),
+                              AUC = rep(AUC,each = 25),
+                              RHO = rep(rep(rep(RHO,each = 5),3),2),
+                              cov = rep(rep(COV,15),2),
+                              bias = c(sim_result_blance$R1VAR_BIAS,sim_result_unblance$R1VAR_BIAS,
+                                       sim_nancy_blance$R1VAR_BIAS,sim_nancy_unblance$R1VAR_BIAS))
+
+
+p2 = ggplot(VAR_bias_combine%>%filter(method == "CCAUC"), aes(x=1:150,y = bias)) + 
+geom_point(aes(color = AUC,,shape = RHO))+ labs(x = "configurations", y = "VAR Relative Bias") + 
+geom_vline(xintercept = seq(75,149,by = 75), linetype = "dashed", size =0.5) +
+theme_bw() +  theme(text = element_text(size = 7)) 
+## COV bias
+
+COV_bias_combine = data.frame(method = rep(c("CCAUC","Nancy"),each = 150), 
+                              design = rep(rep(c("balance","unbalance"),each = 75),2),
+                              AUC = rep(AUC,each = 25),
+                              RHO = rep(rep(rep(RHO,each = 5),3),2),
+                              cov = rep(rep(COV,15),2),
+                              bias = c(sim_result_blance$R1R2COV_BIAS,sim_result_unblance$R1R2COV_BIAS,
+                                       sim_nancy_blance$R1R2COV_BIAS,sim_nancy_unblance$R1R2COV_BIAS))
+
+
+p3 = ggplot(COV_bias_combine%>%filter(method == "CCAUC"), aes(x=1:150,y = bias)) + geom_point(aes(color = AUC,shape = RHO))+
+  labs(x = "configurations", y = "COV Relative Bias")  + 
+  geom_vline(xintercept = seq(75,149,by = 75), linetype = "dashed", size =0.5) +
+  theme_bw() +  theme(text = element_text(size = 7)) 
+
+
+#grid.arrange(p1,p2,p3,nrow =1)
+
+## calculate CV ----
+
+## AUC CV
+
+
+sim_result_blance$R1AUC_CV = sqrt(sim_result_blance$R1AUC_VAR)/sim_result_blance$TRUE_AUC
+sim_result_unblance$R1AUC_CV = sqrt(sim_result_unblance$R1AUC_VAR)/sim_result_unblance$TRUE_AUC
+sim_nancy_blance$R1AUC_CV = sqrt(sim_nancy_blance$R1AUC_VAR)/sim_nancy_blance$TRUE_AUC
+sim_nancy_unblance$R1AUC_CV = sqrt(sim_nancy_unblance$R1AUC_VAR)/sim_nancy_unblance$TRUE_AUC
+
+## VAR CV
+sim_result_blance$R1VAR_CV = sqrt(sim_result_blance$R1VAR_VAR)/sim_result_blance$R1AUC_VAR
+sim_result_unblance$R1VAR_CV = sqrt(sim_result_unblance$R1VAR_VAR)/sim_result_unblance$R1AUC_VAR
+sim_nancy_blance$R1VAR_CV = sqrt(sim_nancy_blance$R1VAR_VAR)/sim_nancy_blance$R1AUC_VAR
+sim_nancy_unblance$R1VAR_CV = sqrt(sim_nancy_unblance$R1VAR_VAR)/sim_nancy_unblance$R1AUC_VAR
+
+
+sim_result_blance$R1VAR_CV = sqrt(sim_result_blance$R1VAR_VAR)
+sim_result_unblance$R1VAR_CV = sqrt(sim_result_unblance$R1VAR_VAR)
+sim_nancy_blance$R1VAR_CV = sqrt(sim_nancy_blance$R1VAR_VAR)/sim_nancy_blance$R1AUC_VAR
+sim_nancy_unblance$R1VAR_CV = sqrt(sim_nancy_unblance$R1VAR_VAR)/sim_nancy_unblance$R1AUC_VAR
+## COV CV
+
+sim_result_blance$R1R2COV_CV = sqrt(sim_result_blance$R1R2COV_VAR)/sim_result_blance$R1R2COV_MC
+sim_result_unblance$R1R2COV_CV = sqrt(sim_result_unblance$R1R2COV_VAR)/sim_result_unblance$R1R2COV_MC
+sim_nancy_blance$R1R2COV_CV = sqrt(sim_nancy_blance$R1R2COV_VAR)/sim_nancy_blance$R1R2COV_MC
+sim_nancy_unblance$R1R2COV_CV = sqrt(sim_nancy_unblance$R1R2COV_VAR)/sim_nancy_unblance$R1R2COV_MC
+
+
+
+## CV plot ---- 
+
+## AUC cv
+AUC_CV_combine = data.frame(method = rep(c("CCAUC","Nancy"),each = 150), 
+                              design = rep(rep(c("balance","unbalance"),each = 75),2),
+                              CV = c(sim_result_blance$R1AUC_CV,sim_result_unblance$R1AUC_CV,
+                                       sim_nancy_blance$R1AUC_CV,sim_nancy_unblance$R1AUC_CV))
+
+
+p4 = ggplot(AUC_CV_combine, aes(x=1:300,y = CV)) + geom_point(aes(color = method, shape = design))+
+  ggtitle("AUC CV Compare") + labs(x = "configurations", y = "AUC CV") + 
+  geom_vline(xintercept = seq(75,225,by = 75), linetype = "dashed", size =0.5) +
+  theme_bw() +  theme(text = element_text(size = 7)) 
+
+## VAR CV
+
+VAR_CV_combine = data.frame(method = rep(c("CCAUC","Nancy"),each = 150), 
+                            design = rep(rep(c("balance","unbalance"),each = 75),2),
+                             AUC = rep(AUC,each = 25),
+                             RHO = rep(rep(rep(RHO,each = 5),3),2),
+                             cov = rep(rep(COV,15),2),
+                              CV = c(sim_result_blance$R1VAR_CV,sim_result_unblance$R1VAR_CV,
+                                       sim_nancy_blance$R1VAR_CV,sim_nancy_unblance$R1VAR_CV))
+
+
+p5 = ggplot(VAR_CV_combine%>%filter(method == "CCAUC"), aes(x=1:150,y = CV)) + geom_point(aes(color = AUC, shape = RHO))+
+ labs(x = "configurations", y = "VAR CV") + 
+  geom_vline(xintercept = seq(75,149,by = 75), linetype = "dashed", size =0.5) +
+  theme_bw() +  theme(text = element_text(size = 7)) 
+
+## COV CV
+
+COV_CV_combine = data.frame(method = rep(c("CCAUC","Nancy"),each = 150), 
+                              design = rep(rep(c("balance","unbalance"),each = 75),2),
+                            AUC = rep(AUC,each = 25),
+                            RHO = rep(rep(rep(RHO,each = 5),3),2),
+                            cov = rep(rep(COV,15),2),
+                              CV = c(sim_result_blance$R1R2COV_CV,sim_result_unblance$R1R2COV_CV,
+                                       sim_nancy_blance$R1R2COV_CV,sim_nancy_unblance$R1R2COV_CV))
+
+
+p6 = ggplot(COV_CV_combine%>%filter(method == "CCAUC"), aes(x=1:150,y = CV)) + geom_point(aes(color = AUC, shape = RHO))+
+  labs(x = "configurations", y = "COV CV") + #ylim(0,2.5) + 
+  geom_vline(xintercept = seq(75,149,by = 75), linetype = "dashed", size =0.5) +
+  theme_bw() +  theme(text = element_text(size = 7)) 
+
+
+
+grid.arrange(p2,p3,p5,p6,nrow = 2)
+
+
+
+
+```
+
+
+
+## Columns in the above files
+
+  + **R1AUC_MEAN**: The mean of reader 1 between-cases AUC estimates among 10,000 simulations.
+  + **R2AUC_MEAN**: The mean of reader 2 between-cases AUC estimates among 10,000 simulations.
+  + **R1AUC_VAR**: The variance of reader 1 between-cases AUC estimates among 10,000 simulations. 
+  + **R2AUC_VAR**: The variance of reader 2 between-cases AUC estimates among 10,000 simulations. 
+  + **R1VAR_MEAN**: The mean of reader 1 between-cases AUC variance estimates among 10,000 simulations.
+  + **R2VAR_MEAN**: The mean of reader 2 between-cases AUC variance estimates among 10,000 simulations.
+  + **R1VAR_VAR**:  The variance of reader 1 between-cases AUC variance estimates among 10,000 simulations.
+  + **R2VAR_VAR**:  The variance of reader 2 between-cases AUC variance estimates among 10,000 simulations.
+  + **R1R2COV_MEAN**: The mean of reader 1 and reader 2 between-cases AUC covariance estimates among 10,000 simulations.
+  + **R1R2COV_VAR**: The variance of reader 1 and reader 2 between-cases AUC covariance estimates among 10,000 simulations.
+  + **TRUE_VAR_MEAN**: The mean of between-cases AUC estimator's theoretical variances among 10,000 simulations.
+  + **TRUE_VAR_VAR**: The variance of between-cases AUC estimator's theoretical variances among 10,000 simulations. 
+  + **TRUE_COV_MEAN**: The mean of between-cases AUC estimator's theoretical covariances among 10,000 simulations.
+  + **TRUE_COV_VAR**: The variance of between-cases AUC estimator's theoretical covariances among 10,000 simulations. 
+  + **R1R2COV_MC**: The covariance between reader 1 and reader 2 between-cases AUC estimates among 10,000 simulations.
+  + **TRUE_AUC**: The true AUC values for the simulated data.
+  
+## 75 configurations in the simulation
+
+```{r,echo=FALSE}
+
+knitr::kable(configs_75, caption = '75 configurations')
+```
+
